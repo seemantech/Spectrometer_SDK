@@ -1,0 +1,15 @@
+K:\CSharpSimpleGUI\src\obj\x86\Release\SpectrometerCSharpDemo.Properties.Resources.resources
+K:\CSharpSimpleGUI\src\obj\x86\Release\SpectrometerDemo.csproj.GenerateResource.Cache
+K:\CSharpSimpleGUI\src\obj\x86\Release\SpectrometerDemo.exe
+K:\CSharpSimpleGUI\src\obj\x86\Release\SpectrometerDemo.pdb
+K:\CSharpSimpleGUI\src\obj\x86\Release\SpectrometerDemo.csprojResolveAssemblyReference.cache
+K:\CSharpSimpleGUI\src\obj\x86\Release\SpectrometerCSharpDemo.Form1.resources
+K:\CSharpSimpleGUI\src\bin\SpectrometerDemo.exe
+K:\CSharpSimpleGUI\src\bin\SpectrometerDemo.pdb
+K:\SpectrometerDemo\src\obj\x86\Release\SpectrometerDemo.exe
+K:\SpectrometerDemo\src\obj\x86\Release\SpectrometerDemo.pdb
+K:\SpectrometerDemo\src\obj\x86\Release\SpectrometerCSharpDemo.Form1.resources
+K:\SpectrometerDemo\src\obj\x86\Release\SpectrometerCSharpDemo.Properties.Resources.resources
+K:\SpectrometerDemo\src\obj\x86\Release\SpectrometerDemo.csproj.GenerateResource.Cache
+K:\SpectrometerDemo\src\bin\SpectrometerDemo.exe
+K:\SpectrometerDemo\src\bin\SpectrometerDemo.pdb

@@ -1,0 +1,10 @@
+K:\2016_Software\CSharpSimpleGUI\src\obj\x64\Release\OmniDriverCSharpDemo.Properties.Resources.resources
+K:\2016_Software\CSharpSimpleGUI\src\obj\x64\Release\OmniDriverCSharpDemo.csproj.GenerateResource.Cache
+K:\2016_Software\CSharpSimpleGUI\src\bin\x64\Release\OmniDriverCSharpDemo.exe
+K:\2016_Software\CSharpSimpleGUI\src\bin\x64\Release\OmniDriverCSharpDemo.pdb
+K:\2016_Software\CSharpSimpleGUI\src\obj\x64\Release\OmniDriverCSharpDemo.exe
+K:\2016_Software\CSharpSimpleGUI\src\obj\x64\Release\OmniDriverCSharpDemo.pdb
+K:\2016_Software\CSharpSimpleGUI\src\obj\x64\Release\SpectrometerCSharpDemo.Form1.resources
+K:\2016_Software\CSharpSimpleGUI\src\obj\x64\Release\OmniDriverCSharpDemo.csprojResolveAssemblyReference.cache
+K:\CSharpSimpleGUI\src\obj\x64\Release\OmniDriverCSharpDemo.exe
+K:\CSharpSimpleGUI\src\obj\x64\Release\OmniDriverCSharpDemo.pdb

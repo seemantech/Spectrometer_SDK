@@ -1,0 +1,8 @@
+K:\CSharpSimpleGUI\src\bin\x64\Debug\SpectrometerDemo.exe
+K:\CSharpSimpleGUI\src\bin\x64\Debug\SpectrometerDemo.pdb
+K:\CSharpSimpleGUI\src\obj\x64\Debug\SpectrometerDemo.csprojResolveAssemblyReference.cache
+K:\CSharpSimpleGUI\src\obj\x64\Debug\SpectrometerCSharpDemo.Form1.resources
+K:\CSharpSimpleGUI\src\obj\x64\Debug\SpectrometerCSharpDemo.Properties.Resources.resources
+K:\CSharpSimpleGUI\src\obj\x64\Debug\SpectrometerDemo.csproj.GenerateResource.Cache
+K:\CSharpSimpleGUI\src\obj\x64\Debug\SpectrometerDemo.exe
+K:\CSharpSimpleGUI\src\obj\x64\Debug\SpectrometerDemo.pdb
