@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Web Serial Port Connector - Spectrometer Data Real-time Plotting</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- 引入 Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Chart.js CDN，用于数据可视化 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+
+    <style>
+        /* Custom scrollbar style */
+        #log-output {
+            max-height: 200px; /* Reduce log area to make space for chart */
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+            background-color: #f9fafb;
+            padding: 1rem;
+        }
+        .log-line {
+            font-family: monospace;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            color: #374151;
+        }
+#chart-container {
+            height: 350px; /* Set chart height */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 md:p-8 flex items-start justify-center">
+
+    <div id="app-container" class="w-full max-w-4xl bg-white shadow-xl rounded-2xl p-6 md:p-8">
+        <h1 class="3xl font-bold text-gray-800 mb-2">Web Serial Port Connection Demo (Spectrometer)</h1>
+        <p class="text-sm text-gray-500 mb-6">
+            This program is used to send spectrometer configuration commands and receive 16-bit (high-byte first) binary data streams for real-time plotting.
+        </p>
+
+        <!-- 光谱仪状态 -->
+        <div id="api-status" class="mb-6 p-3 rounded-lg border">
+            <p class="font-semibold text-sm">Spectrometer Status: <span id="status-message" class="text-red-600">Not Supported</span></p>
+        </div>
+        
+        <!-- 串口连接设置 (包含波特率和端口选择) -->
+        <div class="mb-6 border p-4 rounded-xl bg-gray-50">
+            <h3 class="text-base font-semibold text-gray-700 mb-3">Serial Port Connection Settings</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Col 1: Baud Rate (可编辑下拉框) -->
+                <div class="col-span-1">
+                    <label for="baud-rate" class="block text-sm font-medium text-gray-700 mb-2">Baud Rate</label>
+                    <input 
+                        type="text" 
+                        id="baud-rate" 
+                        value="921600" 
+                        list="baud-rates-options"
+                        class="w-full border border-gray-300 p-2 rounded-lg text-sm"
+                    >
+                    <!-- 确保 datalist 包含所有常用选项 -->
+                    <datalist id="baud-rates-options">
+                        <option value="115200"></option>
+                        <option value="921600"></option>
+                    </datalist>
+                </div>
+                
+                <!-- Col 2 & 3: Port Selection (刷新按钮在附近) -->
+                <div class="md:col-span-2">
+                    <label for="port-select" class="block text-sm font-medium text-gray-700 mb-2">Select Serial Device / Refresh</label>
+                    <div class="flex gap-2">
+                        <select 
+                            id="port-select" 
+                            class="flex-1 border border-gray-300 p-2 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white disabled:bg-gray-50"
+                            disabled
+                        >
+                            <option value="">-- No Authorized Devices Found --</option>
+                        </select>
+                        <button 
+                            id="request-port-btn" 
+                            onclick="requestNewPort()"
+                            class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-xl transition duration-150 disabled:bg-gray-400"
+                            disabled
+                        >
+                            Refresh Serial Ports
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 连接控制 -->
+        <div class="flex flex-col sm:flex-row gap-4 mb-6">
+            <button 
+                id="connect-btn" 
+                onclick="connectSerial()"
+                class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-xl shadow-md transition duration-150 disabled:bg-gray-400"
+                disabled
+            >
+                Connect
+            </button>
+            <button 
+                id="disconnect-btn" 
+                onclick="disconnectSerial()"
+                disabled
+                class="flex-1 bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-xl shadow-md transition duration-150 disabled:bg-gray-400"
+            >
+                Disconnect
+            </button>
+        </div>
+        
+        <!-- 光谱仪扫描参数 -->
+        <div class="mb-6 border p-4 rounded-xl bg-gray-50">
+            <h3 class="text-base font-semibold text-gray-700 mb-3">Spectrometer Scanning Parameters</h3>
+            <!-- 采用 4 列布局 -->
+            <div class="grid grid-cols-2 gap-4 md:grid-cols-4">
+                
+                <!-- Integration Time -->
+                <div>
+                    <label for="integration-time" class="block text-xs font-medium text-gray-500">Integration Time (ms)</label>
+                    <input 
+                        type="number" 
+                        id="integration-time" 
+                        value="100.000" 
+                        min="0" 
+                        step="0.001" 
+                        class="w-full border border-gray-300 p-2 rounded-lg text-sm"
+                    >
+                </div>
+<!-- Start Wavelength -->
+                <div>
+                    <label for="start-wavelength" class="block text-xs font-medium text-gray-500">Start Wavelength (nm)</label>
+                    <input type="number" id="start-wavelength" value="200" min="0" class="w-full border border-gray-300 p-2 rounded-lg text-sm" onchange="updateChart()">
+                </div>
+<!-- End Wavelength -->
+                <div>
+                    <label for="end-wavelength" class="block text-xs font-medium text-gray-500">End Wavelength (nm)</label>
+                    <input type="number" id="end-wavelength" value="1000" min="0" class="w-full border border-gray-300 p-2 rounded-lg text-sm" onchange="updateChart()">
+                </div>
+<!-- Wavelength Interval -->
+                <div class="col-span-2 md:col-span-1">
+                    <label for="interval-wavelength" class="block text-xs font-medium text-gray-500">Wavelength Interval (nm)</label>
+                    <input 
+                        type="number" 
+                        id="interval-wavelength" 
+                        value="1.00" 
+                        min="0.01" 
+                        step="0.01" 
+                        class="w-full border border-gray-300 p-2 rounded-lg text-sm" 
+                        onchange="updateChart()"
+                    >
+                </div>
+            </div>
+        </div>
+
+
+        <!-- 命令操作区域 (分离为两个功能) -->
+        <div class="mb-6">
+            <h3 class="text-base font-semibold text-gray-700 mb-2">Command Operations</h3>
+            <div class="space-y-4">
+                
+                <!-- 1. 自定义命令发送 (Text Data) - 放在前面 -->
+                <div>
+                    <label for="send-data" class="block text-sm font-medium text-gray-500 mb-2">Send Custom Command (e.g., version query):</label>
+                    <div class="flex gap-2">
+                        <input 
+                            type="text" 
+                            id="send-data" 
+                            placeholder="Enter custom command (e.g., {cfg.uart1()})"
+                            class="flex-1 border border-gray-300 p-2 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                            disabled
+                        >
+                        <button 
+                            id="send-btn" 
+                            onclick="writeSerial()"
+                            class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-xl transition duration-150 disabled:bg-gray-400"
+                            disabled
+                        >
+                            Send Custom Command (Text)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2. 光谱读取 (Binary Data) - 放在后面 -->
+                <div class="flex gap-2">
+                    <button 
+                        id="read-spectrum-btn" 
+                        onclick="readSpectrum()"
+                        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-xl transition duration-150 disabled:bg-gray-400"
+                        disabled
+                    >
+                        Spectrum Reading (Plotting)
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 实时图表区域 -->
+        <div class="mt-8">
+            <h2 class="text-xl font-semibold text-gray-800 mb-3" id="chart-title">Spectrum Plot</h2>
+            <div id="chart-container" class="rounded-xl p-4 bg-gray-50 border shadow-inner">
+                <canvas id="data-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- 日志输出 - 标题和清空按钮 -->
+        <div class="mt-8 flex justify-between items-center">
+            <h2 class="text-xl font-semibold text-gray-800 mb-3">Serial Communication Log (Debug Info)</h2>
+            <button 
+                id="clear-log-btn" 
+                onclick="clearLog()"
+                class="bg-red-500 hover:bg-red-600 text-white font-semibold py-1 px-3 rounded-lg text-sm transition duration-150 mb-3"
+            >
+Clear Log
+            </button>
+        </div>
+        
+        <!-- 日志输出区域 -->
+        <div id="log-output" class="rounded-xl">
+            <!-- Log messages appear here -->
+        </div>
+    </div>
+
+    <script>
+        let port; 
+        let reader; 
+        let keepReading = false; 
+        let portIsConnected = false; 
+        let availablePorts = []; 
+        let readingPromise = null; 
+
+// Data processing and plotting related variables
+        let dataBuffer = new Uint8Array(0); // Raw byte buffer.
+        let convertedData = []; // Converted UInt16 data point array
+        let chartInstance = null; // Chart.js instance
+        const DEVICE_INFO_BYTES = 64; // Device info bytes (now treated as 64 bytes at end of frame)
+        const CUSTOM_RESPONSE_SIZE = 64; // Custom command expected return bytes
+        
+        // Flag to control data interpretation mode (true=binary plot, false=text log)
+        let isExpectingBinaryData = true; 
+        const textDecoder = new TextDecoder('utf-8'); // Use UTF-8 to decode log text
+
+        const logOutput = document.getElementById('log-output');
+        const statusMessage = document.getElementById('status-message');
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const sendInput = document.getElementById('send-data');
+        const sendBtn = document.getElementById('send-btn');
+        const readSpectrumBtn = document.getElementById('read-spectrum-btn'); // 新增按钮引用
+        const portSelect = document.getElementById('port-select');
+        const requestPortBtn = document.getElementById('request-port-btn');
+        
+        // Configuration input boxes
+        const baudRateInput = document.getElementById('baud-rate'); // 新增波特率输入框引用
+        const integrationTimeInput = document.getElementById('integration-time');
+        const startWavelengthInput = document.getElementById('start-wavelength');
+        const endWavelengthInput = document.getElementById('end-wavelength');
+        const intervalWavelengthInput = document.getElementById('interval-wavelength');
+
+
+        // --- Helper function: Log messages ---
+        function log(message, type = 'info') {
+            const line = document.createElement('div');
+            line.className = `log-line ${type === 'error' ? 'text-red-600' : type === 'sent' ? 'text-green-600' : type === 'received' ? 'text-blue-600' : 'text-gray-800'}`;
+            
+            const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+            line.textContent = `[${timestamp}] ${message}`;
+
+            logOutput.appendChild(line);
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+        
+        // --- Helper function: Clear log ---
+        function clearLog() {
+            logOutput.innerHTML = '';
+            log("日志已手动清空。", 'info');
+        }
+
+        // --- Core function: List authorized ports (refresh serial ports) ---
+        async function listAvailablePorts() {
+            if (!('serial' in navigator)) return;
+
+            try {
+                availablePorts = await navigator.serial.getPorts();
+            } catch (error) {
+                if (error.name === 'SecurityError') {
+                    log("警告: 无法获取已授权设备列表。请点击 '刷新串口'。", 'error');
+                    availablePorts = []; 
+                } else {
+                    log(`列出端口时发生未知错误: ${error.message}`, 'error');
+                }
+            }
+            
+            portSelect.innerHTML = '';
+
+            if (availablePorts.length === 0) {
+                portSelect.innerHTML = '<option value="">-- 未发现已授权设备 --</option>';
+            } else {
+                availablePorts.forEach((p, index) => {
+                    const info = p.getInfo();
+                    const portName = info.usbProductId 
+                        ? `USB 设备 (PID: 0x${info.usbProductId.toString(16).toUpperCase()})` 
+                        : `未知串口设备 ${index + 1}`;
+                    
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = portName;
+                    portSelect.appendChild(option);
+                });
+                log(`已发现 ${availablePorts.length} 个已授权串口设备。`, 'info');
+            }
+            updateUIState();
+        }
+
+        // --- Core function: Request new serial device ---
+        async function requestNewPort() {
+            try {
+                log("正在请求用户选择新的串口设备...");
+                const newPort = await navigator.serial.requestPort();
+                log("成功授权新设备。正在刷新列表...", 'info');
+                
+                await listAvailablePorts();
+                
+                const newPortIndex = availablePorts.findIndex(p => p === newPort);
+                if (newPortIndex !== -1) {
+                    portSelect.value = newPortIndex;
+                }
+                
+                updateUIState();
+            } catch (error) {
+                if (error.name === 'NotFoundError') {
+                    log("用户取消了设备选择。", 'error');
+                } else {
+                    log(`请求设备错误: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        // --- Core function: Connect serial port ---
+        async function connectSerial() {
+            if (portIsConnected) return;
+            
+            const selectedIndex = portSelect.value;
+            if (selectedIndex === "") {
+                log("请先选择一个串口设备。", 'error');
+                return;
+            }
+            
+            port = availablePorts[parseInt(selectedIndex)];
+
+            // 获取并校验波特率
+            const baudRate = parseInt(baudRateInput.value);
+            if (isNaN(baudRate) || baudRate < 9600) {
+                log("错误：波特率无效。请设置一个大于等于 9600 的整数值。", 'error');
+                return;
+            }
+
+            try {
+                await port.open({ baudRate: baudRate }); // 使用动态波特率
+                log(`成功连接到设备。波特率: ${baudRate}。`, 'info');
+                
+                portIsConnected = true;
+                updateUIState();
+                
+                readingPromise = readData(); // 开始读取
+                
+            } catch (error) {
+                log(`连接错误: ${error.message}`, 'error');
+                portIsConnected = false;
+                updateUIState();
+            }
+        }
+
+        // --- Core function: Continuous data reading (handle binary or text) ---
+        async function readData() {
+            keepReading = true;
+            
+            while (port.readable && keepReading) {
+                reader = port.readable.getReader();
+
+                try {
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) {
+                            break;
+                        }
+                        if (value) {
+                            if (isExpectingBinaryData) {
+                                processIncomingBytes(value);
+                            } else {
+                                processIncomingCustomCommandResponse(value);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    if (keepReading) {
+                        log(`读取数据时发生错误 (设备可能已断开): ${error.message}`, 'error');
+                        keepReading = false;
+                        portIsConnected = false;
+                        updateUIState();
+                    }
+                } finally {
+                    if (reader) {
+                        reader.releaseLock();
+                        reader = null;
+                    }
+                }
+            }
+            
+            if (portIsConnected && port) { 
+                log("读取循环结束，正在关闭端口...", 'info');
+                try {
+                    await port.close(); 
+                } catch(error) {
+                    log(`关闭端口时发生错误: ${error.message}`, 'error');
+                }
+            }
+        }
+        
+        // --- Core function: Process incoming custom command response (fixed 64 bytes) ---
+        function processIncomingCustomCommandResponse(newBytes) {
+            // 1. 合并新接收到的字节到缓冲区
+            const merged = new Uint8Array(dataBuffer.length + newBytes.length);
+            merged.set(dataBuffer);
+            merged.set(newBytes, dataBuffer.length);
+            dataBuffer = merged;
+
+            const dataLength = dataBuffer.length;
+            const expectedResponseSize = CUSTOM_RESPONSE_SIZE;
+            
+            // 2. 检查缓冲区是否包含完整的 64 字节响应
+            if (dataLength >= expectedResponseSize) {
+                // 仅在成功读取完整帧时输出日志
+                log(`已读到 ${expectedResponseSize}/应读到 ${expectedResponseSize} Bytes。 (读取成功)`, 'received');
+                
+                // 3. 提取 64 字节响应数据
+                const responseData = dataBuffer.slice(0, expectedResponseSize);
+                
+                // 4. 将其解码为字符串 (UTF-8)
+                const responseText = textDecoder.decode(responseData).trim();
+                log(`接收到命令响应: ${responseText}`, 'received');
+                
+                // 5. 清理已处理的数据
+                dataBuffer = dataBuffer.slice(expectedResponseSize);
+                
+                if (dataBuffer.length > 0) {
+                    log(`注意: 缓冲区仍有 ${dataBuffer.length} 字节剩余，等待下一帧。`, 'info');
+                }
+            } 
+            // 移除 else 块以抑制中间读取状态日志
+        }
+
+        // --- Core function: Binary data processing (Big-Endian UInt16 conversion, for plotting) ---
+        function processIncomingBytes(newBytes) {
+            // 1. 合并新接收到的字节到缓冲区
+            const merged = new Uint8Array(dataBuffer.length + newBytes.length);
+            merged.set(dataBuffer);
+            merged.set(newBytes, dataBuffer.length);
+            dataBuffer = merged;
+
+            const dataLength = dataBuffer.length;
+            
+            // 动态计算预期的完整数据帧大小 (使用 parseFloat 处理波长间隔)
+            const startWavelength = parseFloat(startWavelengthInput.value) || 200;
+            const endWavelength = parseFloat(endWavelengthInput.value) || 1000;
+            const intervalWavelength = parseFloat(intervalWavelengthInput.value) || 1;
+
+            if (startWavelength >= endWavelength || intervalWavelength <= 0 || isNaN(intervalWavelength)) {
+                log("错误：波长配置无效或间隔为非数字/小于等于零，无法计算预期字节数。", 'error');
+                return;
+            }
+            
+            // 预期数据点数量 = floor((结束 - 起始) / 间隔) + 1
+            const expectedDataPoints = Math.floor((endWavelength - startWavelength) / intervalWavelength) + 1;
+            const safeExpectedDataPoints = Math.max(1, expectedDataPoints); 
+            
+            // 总字节 = (数据点 * 2字节/点)
+            const expectedDataBytes = safeExpectedDataPoints * 2;
+            // 完整帧总字节 = 数据 + 64字节设备信息 (位于末尾)
+            const expectedTotalBytes = expectedDataBytes + DEVICE_INFO_BYTES;
+            
+            // 检查缓冲区中是否包含一个完整的帧
+            if (dataLength >= expectedTotalBytes) {
+                // 记录成功信息，使用要求的格式 (只显示一次最终状态)
+                log(`已读到 ${expectedTotalBytes}/应读到 ${expectedTotalBytes} Bytes。 (读取成功)`, 'received');
+                
+                // 1. 提取强度数据 (用户要求丢弃末尾 64 字节，所以数据是前 expectedDataBytes 字节)
+                const intensityData = dataBuffer.slice(0, expectedDataBytes); 
+                
+                // 2. 丢弃完整的帧 (包含数据和末尾的 64 字节)
+                dataBuffer = dataBuffer.slice(expectedTotalBytes);
+                
+                // 3. 处理强度数据 (Big-Endian UInt16 转换)
+                convertedData = []; 
+                
+                for (let i = 0; i < intensityData.length; i += 2) {
+                    const highByte = intensityData[i];
+                    const lowByte = intensityData[i + 1];
+                    
+                    // Big-Endian (高字节在前) 转换为 16 位无符号整数
+                    const value = (highByte << 8) | lowByte;
+                    convertedData.push(value);
+                }
+                
+                log(`成功转换 ${convertedData.length} 个数据点。`, 'received');
+                updateChart(); // 仅在接收到完整有效数据帧后更新图表
+
+                if (dataBuffer.length > 0) {
+                    log(`注意: 缓冲区仍有 ${dataBuffer.length} 字节剩余 (可能为下一帧的碎片或冗余数据)。`, 'info');
+                }
+            } 
+            // 移除 else 块以抑制中间读取状态日志
+        }
+
+        // --- Core function: Update Chart.js chart ---
+        function updateChart() {
+            const numPoints = convertedData.length;
+            
+            // 获取动态 X 轴配置
+            const currentXStart = parseFloat(startWavelengthInput.value) || 200;
+            const currentXEnd = parseFloat(endWavelengthInput.value) || 1000;
+
+            // 如果没有数据，清空图表并返回
+            if (numPoints === 0) {
+                if(chartInstance) {
+                    chartInstance.data.datasets[0].data = [];
+                    // 即使没有数据，也要确保 X 轴范围是最新的
+                    chartInstance.options.scales.x.min = currentXStart;
+                    chartInstance.options.scales.x.max = currentXEnd;
+                    chartInstance.update('none');
+                }
+                return;
+            }
+
+            // 1. 计算 X/Y 坐标数据
+            const chartData = convertedData.map((y, index) => {
+                let x;
+                if (numPoints === 1) {
+                     x = currentXStart; 
+                } else {
+                    // 线性插值计算 X 轴 (波长)
+                    // 使用 intervalWavelength 作为步长
+                    const intervalWavelength = parseFloat(intervalWavelengthInput.value) || 1;
+                    const step = intervalWavelength;
+                    x = currentXStart + index * step;
+                }
+                return { x: parseFloat(x.toFixed(2)), y: y };
+            });
+
+            // 2. 初始化或更新图表
+            if (!chartInstance) {
+                const ctx = document.getElementById('data-chart').getContext('2d');
+                chartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        datasets: [{
+                            label: '强度 (counts)',
+                            data: chartData,
+                            borderColor: 'rgb(59, 130, 246)', // Tailwind blue-500
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.1,
+                            fill: false,
+                            pointRadius: 1,
+                            pointHoverRadius: 5
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                position: 'bottom',
+                                title: {
+                                    display: true,
+                                    text: '波长 (nm)', // X-axis label
+                                    font: { weight: 'bold', size: 14 }
+                                },
+                                min: currentXStart,
+                                max: currentXEnd,
+                                ticks: { stepSize: 50 } // X轴以 50nm 为分割
+                            },
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: '强度 (counts)', 
+                                    font: { weight: 'bold', size: 14 }
+                                },
+                                beginAtZero: true
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                            },
+                            title: {
+                                display: true,
+                                text: '光谱图', 
+                                font: { size: 16, weight: 'bold' }
+                            }
+                        }
+                    }
+                });
+            } else {
+                // 更新现有图表数据和配置
+                chartInstance.data.datasets[0].data = chartData;
+                
+                // 更新 X 轴范围
+                chartInstance.options.scales.x.min = currentXStart;
+                chartInstance.options.scales.x.max = currentXEnd;
+                // 保持 X 轴 stepSize 为 50nm
+                
+                chartInstance.update('quiet');
+            }
+        }
+
+        // --- Core function: Send spectrum reading command (expect dynamic length binary data) ---
+        async function readSpectrum() {
+            if (!portIsConnected || !port.writable) {
+                log("错误：端口未连接或不可写入。", 'error');
+                return;
+            }
+
+            // 1. 获取动态参数并校验
+            const integrationTime = parseFloat(integrationTimeInput.value); 
+            const startWavelength = parseInt(startWavelengthInput.value);
+            const endWavelength = parseInt(endWavelengthInput.value);
+            const intervalWavelength = parseFloat(intervalWavelengthInput.value);
+
+            // 基础校验
+            if (isNaN(integrationTime) || integrationTime <= 0) {
+                log("错误：积分时间无效。请检查积分时间值。", 'error');
+                return;
+            }
+            if (isNaN(startWavelength) || isNaN(endWavelength) || isNaN(intervalWavelength) || startWavelength >= endWavelength || intervalWavelength <= 0) {
+                log("错误：波长配置无效。请检查起始、结束和间隔值。", 'error');
+                return;
+            }
+
+            // 2. 构造命令: {data.read([IntegrationTime], [Start], [End], [Interval])}
+            const formattedIntegrationTime = integrationTime.toFixed(3); 
+            const formattedInterval = intervalWavelength.toFixed(2);
+            
+            // 确保命令以 } 结束
+            const dataToSend = `{data.read(${formattedIntegrationTime},${startWavelength},${endWavelength},${formattedInterval})}`;
+            
+            isExpectingBinaryData = true; // 期望二进制绘图数据
+            dataBuffer = new Uint8Array(0); // 清空缓冲区，为新响应做准备
+
+            const encoder = new TextEncoder(); 
+            const data = encoder.encode(dataToSend + '\r\n');
+
+            const writer = port.writable.getWriter();
+            try {
+                await writer.write(data);
+                log(`发送光谱读取命令 (绘图): ${dataToSend}`, 'sent'); 
+            } catch (error) {
+                log(`发送数据时发生错误: ${error.message}`, 'error');
+            } finally {
+                writer.releaseLock();
+            }
+        }
+        
+        // --- Core function: Send custom text command (expect 64 byte text response) ---
+        async function writeSerial() {
+            if (!portIsConnected || !port.writable) {
+                log("错误：端口未连接或不可写入。", 'error');
+                return;
+            }
+            
+            let dataToSend = sendInput.value.trim();
+            
+            if (dataToSend === "") {
+                log("错误：请在输入框中键入要发送的自定义命令。", 'error');
+                return;
+            }
+
+            isExpectingBinaryData = false; // 期望 64 字节的文本响应
+            dataBuffer = new Uint8Array(0); // 清空缓冲区，为新响应做准备
+            
+            const encoder = new TextEncoder(); 
+            const data = encoder.encode(dataToSend + '\r\n'); // 添加换行符
+
+            const writer = port.writable.getWriter();
+            try {
+                await writer.write(data);
+                log(`发送自定义命令 (文本): ${dataToSend}`, 'sent'); 
+            } catch (error) {
+                log(`发送数据时发生错误: ${error.message}`, 'error');
+            } finally {
+                writer.releaseLock();
+            }
+        }
+
+        // --- Core function: Disconnect (and clean up data) ---
+        async function disconnectSerial() {
+            if (!portIsConnected) return;
+
+            log("正在请求断开连接...", 'info');
+            
+            keepReading = false; 
+
+            if (reader) {
+                try {
+                    await reader.cancel();
+                } catch (e) {
+                    log(`取消读取操作时发生错误: ${e.message}`, 'error');
+                }
+            }
+            
+            if (readingPromise) {
+                try {
+                    await readingPromise;
+                } catch (e) {
+                    log(`等待读取线程结束时发生错误: ${e.message}`, 'error');
+                }
+            }
+
+            // 清理绘图数据和缓冲区
+            convertedData = [];
+            dataBuffer = new Uint8Array(0);
+            if (chartInstance) {
+                chartInstance.data.datasets[0].data = [];
+                chartInstance.update('none');
+            }
+            log("绘图数据和缓冲区已清空。", 'info');
+
+            // 4. 清理状态和 UI
+            portIsConnected = false;
+            readingPromise = null;
+            updateUIState();
+            log("连接已断开。", 'info');
+            
+            listAvailablePorts();
+        }
+
+        // --- UI update function ---
+        function updateUIState() {
+            const hasPorts = availablePorts.length > 0;
+
+            if (portIsConnected) {
+                statusMessage.textContent = '已连接';
+                statusMessage.className = 'text-green-600';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                sendInput.disabled = false;
+                sendBtn.disabled = false;
+                readSpectrumBtn.disabled = false; // 允许光谱读取
+                portSelect.disabled = true;
+                requestPortBtn.disabled = true;
+                baudRateInput.disabled = true; // 连接后禁用波特率修改
+            } else {
+                statusMessage.textContent = '未连接';
+                statusMessage.className = 'text-red-600';
+                connectBtn.disabled = !hasPorts || portSelect.value === "";
+                disconnectBtn.disabled = true;
+                sendInput.disabled = true;
+                sendBtn.disabled = true;
+                readSpectrumBtn.disabled = true; // 禁止光谱读取
+                portSelect.disabled = !hasPorts;
+                requestPortBtn.disabled = false;
+                baudRateInput.disabled = false; // 未连接时允许修改波特率
+            }
+        }
+
+        // --- Initialization check ---
+        function checkApiSupport() {
+            if ('serial' in navigator) {
+                statusMessage.textContent = '支持 Web Serial API';
+                statusMessage.className = 'text-green-600';
+                
+                listAvailablePorts();
+                
+                log("浏览器支持 Web Serial API。");
+
+                // 首次加载时调用一次 updateChart 以确保图表轴初始化为默认配置
+                updateChart(); 
+            } else {
+                statusMessage.textContent = '不支持 Web Serial API';
+                statusMessage.className = 'text-red-600';
+                log("错误：您的浏览器不支持 Web Serial API，请使用 Chrome/Edge 等最新版本浏览器。", 'error');
+            }
+        }
+        
+        // Bind events
+        portSelect.onchange = updateUIState;
+
+        window.onload = checkApiSupport;
+    </script>
+</body>
+</html>
