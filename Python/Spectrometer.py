@@ -38,7 +38,7 @@ strSN = "SN"
 #The following is the spectrometer data reading section
 def ReadIntensity():
     m = 1
-    strCMD = "{data.read(%.3f,%d,%d,%.3f)}" % (fMS, waveBeg, waveEnd , waveInt)
+    strCMD = "{data.read64(%.3f,%d,%d,%.3f)}" % (fMS, waveBeg, waveEnd , waveInt)
     
     rtn = ser.write(strCMD.encode('utf-8'))
     if( rtn < 5):
